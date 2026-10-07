@@ -1,0 +1,103 @@
+{
+  "id": "09-jpy-no-decimals",
+  "description": "JPY invoice: no decimal places, large numbers, 10% consumption tax.",
+  "tags": [
+    "foreign-currency",
+    "jpy",
+    "zero-decimal"
+  ],
+  "ground_truth_source": "hand-authored case spec in evals/generate.ts; the PDF is rendered from the same spec",
+  "context": {
+    "knownInvoices": [],
+    "purchaseOrders": [
+      "PO-4410",
+      "PO-4415",
+      "PO-4420",
+      "PO-4431",
+      "PO-4437",
+      "PO-4452",
+      "PO-4460"
+    ]
+  },
+  "fields": {
+    "document_type": "invoice",
+    "vendor_name": "Mock Cold Storage KK",
+    "invoice_number": "MCS-2026-0457",
+    "issue_date": "2026-09-25",
+    "due_date": "2026-10-31",
+    "currency": "JPY",
+    "po_number": "PO-4460",
+    "line_items": [
+      {
+        "description": "Frozen storage, pallet-month",
+        "quantity": 140,
+        "unit_price": 8500,
+        "amount": 1190000
+      },
+      {
+        "description": "Handling in/out",
+        "quantity": 280,
+        "unit_price": 1200,
+        "amount": 336000
+      }
+    ],
+    "subtotal": 1526000,
+    "tax": 152600,
+    "total": 1678600,
+    "sources": [
+      {
+        "field": "vendor_name",
+        "page": 1,
+        "quote": "Mock Cold Storage KK"
+      },
+      {
+        "field": "invoice_number",
+        "page": 1,
+        "quote": "Invoice No.: MCS-2026-0457"
+      },
+      {
+        "field": "issue_date",
+        "page": 1,
+        "quote": "Invoice Date: 25 Sep 2026"
+      },
+      {
+        "field": "due_date",
+        "page": 1,
+        "quote": "Due Date: 31 Oct 2026"
+      },
+      {
+        "field": "po_number",
+        "page": 1,
+        "quote": "PO Number: PO-4460"
+      },
+      {
+        "field": "currency",
+        "page": 1,
+        "quote": "Currency: JPY"
+      },
+      {
+        "field": "subtotal",
+        "page": 1,
+        "quote": "Subtotal: ¥1,526,000"
+      },
+      {
+        "field": "tax",
+        "page": 1,
+        "quote": "Consumption tax (10%): ¥152,600"
+      },
+      {
+        "field": "total",
+        "page": 1,
+        "quote": "Total due: ¥1,678,600"
+      }
+    ]
+  },
+  "expected_checks": {
+    "line_items_sum_to_subtotal": true,
+    "subtotal_plus_tax_equals_total": true,
+    "dates_valid_and_due_on_or_after_issue": true,
+    "po_exists": true,
+    "not_duplicate": true,
+    "key_fields_cited": true
+  }
+}

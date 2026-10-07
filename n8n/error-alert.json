@@ -1,0 +1,75 @@
+{
+  "id": "InvIntakeErrAlrt1",
+  "name": "Invoice intake: error alert",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Error alert\nSet as the *Error workflow* of the invoice-intake workflow (it already points here by ID). Runs whenever a production execution fails, and posts which node failed and a link to the execution. It deliberately does not include invoice contents.",
+        "height": 200,
+        "width": 420,
+        "color": 3
+      },
+      "name": "Note: error workflow",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        -280
+      ],
+      "id": "5ecf863b-b843-590f-9e1c-4782affcbe68"
+    },
+    {
+      "parameters": {},
+      "name": "When a workflow fails",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c9d0ca78-e010-5811-9913-762d0822b576"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#ap-review"
+        },
+        "text": "={{ ':rotating_light: *' + $json.workflow.name + '* failed at node *' + ($json.execution.lastNodeExecuted || 'unknown') + '*: ' + ($json.execution.error?.message || 'no message') + '\\n' + ($json.execution.url || '') }}",
+        "otherOptions": {}
+      },
+      "name": "Alert ops channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        260,
+        0
+      ],
+      "id": "28b9ff99-c37b-5cee-98fe-6e24b4edc68c",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "When a workflow fails": {
+      "main": [
+        [
+          {
+            "node": "Alert ops channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

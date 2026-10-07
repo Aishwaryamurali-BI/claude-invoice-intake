@@ -1,0 +1,4 @@
+{
+  "_note": "Synthetic open purchase orders for the demo, tests and evals. Not real data.",
+  "open": ["PO-4410", "PO-4415", "PO-4420", "PO-4431", "PO-4437", "PO-4452", "PO-4460"]
+}

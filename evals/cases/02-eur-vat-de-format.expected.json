@@ -1,0 +1,103 @@
+{
+  "id": "02-eur-vat-de-format",
+  "description": "EUR invoice with German number format (1.234,50) and dd.mm.yyyy dates, 19% VAT.",
+  "tags": [
+    "foreign-currency",
+    "eur",
+    "number-format"
+  ],
+  "ground_truth_source": "hand-authored case spec in evals/generate.ts; the PDF is rendered from the same spec",
+  "context": {
+    "knownInvoices": [],
+    "purchaseOrders": [
+      "PO-4410",
+      "PO-4415",
+      "PO-4420",
+      "PO-4431",
+      "PO-4437",
+      "PO-4452",
+      "PO-4460"
+    ]
+  },
+  "fields": {
+    "document_type": "invoice",
+    "vendor_name": "Demo Packaging GmbH",
+    "invoice_number": "RE-55871",
+    "issue_date": "2026-09-15",
+    "due_date": "2026-10-15",
+    "currency": "EUR",
+    "po_number": "PO-4415",
+    "line_items": [
+      {
+        "description": "Stretch film 500 mm, roll",
+        "quantity": 300,
+        "unit_price": 11.89,
+        "amount": 3567
+      },
+      {
+        "description": "Corner boards 1 m, pack of 50",
+        "quantity": 24,
+        "unit_price": 42.5,
+        "amount": 1020
+      }
+    ],
+    "subtotal": 4587,
+    "tax": 871.53,
+    "total": 5458.53,
+    "sources": [
+      {
+        "field": "vendor_name",
+        "page": 1,
+        "quote": "Demo Packaging GmbH"
+      },
+      {
+        "field": "invoice_number",
+        "page": 1,
+        "quote": "Invoice No.: RE-55871"
+      },
+      {
+        "field": "issue_date",
+        "page": 1,
+        "quote": "Invoice Date: 15.09.2026"
+      },
+      {
+        "field": "due_date",
+        "page": 1,
+        "quote": "Due Date: 15.10.2026"
+      },
+      {
+        "field": "po_number",
+        "page": 1,
+        "quote": "PO Number: PO-4415"
+      },
+      {
+        "field": "currency",
+        "page": 1,
+        "quote": "Currency: EUR"
+      },
+      {
+        "field": "subtotal",
+        "page": 1,
+        "quote": "Subtotal: 4.587,00 EUR"
+      },
+      {
+        "field": "tax",
+        "page": 1,
+        "quote": "VAT (19%): 871,53 EUR"
+      },
+      {
+        "field": "total",
+        "page": 1,
+        "quote": "Total due: 5.458,53 EUR"
+      }
+    ]
+  },
+  "expected_checks": {
+    "line_items_sum_to_subtotal": true,
+    "subtotal_plus_tax_equals_total": true,
+    "dates_valid_and_due_on_or_after_issue": true,
+    "po_exists": true,
+    "not_duplicate": true,
+    "key_fields_cited": true
+  }
+}

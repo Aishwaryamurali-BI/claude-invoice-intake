@@ -1,0 +1,620 @@
+{
+  "id": "InvIntakeMain0001",
+  "name": "Invoice intake with human approval (Claude + MCP)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Invoice intake with human approval\nEmail (IMAP) or webhook -> PDF -> MCP server `extract_invoice` (Claude + rule checks) -> if every check passes, DM the approver in Slack and wait -> approve or reject via MCP.\n\n**Nothing is filed until a person clicks Approve.** Failed checks go to a review channel instead.\n\nSet up: fill in the **Config** node; create two *Header Auth* credentials (`Authorization: Bearer <token>`): **Invoice MCP (read)** with a READ token and **Invoice MCP (approver)** with an APPROVER token. Pick them in the HTTP nodes after import. Error workflow: import `error-alert.json` too.",
+        "height": 300,
+        "width": 520,
+        "color": 5
+      },
+      "name": "Note: what this does",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        -480
+      ],
+      "id": "06de3ca7-0b2f-5341-8258-c78c8515f35f"
+    },
+    {
+      "parameters": {
+        "content": "**Two tokens, two scopes.** The extract call uses a read-scope token, so even a bug in this half of the flow can't approve anything. Only the two decision nodes hold the approver token, and they only run after a Slack click.\n\n**Retries:** every MCP call retries 3x, 5 s apart. If extract still fails, the red error output posts an alert; anything else that fails triggers the Error workflow.\n\n**Client data:** successful executions are not saved (Settings), so invoice contents don't pile up in n8n's database.",
+        "height": 280,
+        "width": 420,
+        "color": 3
+      },
+      "name": "Note: least privilege",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        430
+      ],
+      "id": "620c90fe-a92c-5e5d-baf0-60a4354e2ad5"
+    },
+    {
+      "parameters": {
+        "mailbox": "INBOX",
+        "postProcessAction": "read",
+        "downloadAttachments": true,
+        "format": "resolved",
+        "options": {}
+      },
+      "name": "New invoice email (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        0
+      ],
+      "id": "00e453db-bab6-5155-9ad5-c9b02ca94023"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "invoice-intake",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "name": "Invoice upload (webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "1cbabc6e-3861-5c16-93bb-e7f96c60a298"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn each PDF attachment (email) or uploaded file (webhook) into base64 for the MCP call.\n// Non-PDF attachments are ignored. Nothing is logged here.\nconst out = [];\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const bin = items[i].binary || {};\n  for (const key of Object.keys(bin)) {\n    const meta = bin[key];\n    const isPdf = (meta.mimeType || '').includes('pdf') || (meta.fileName || '').toLowerCase().endsWith('.pdf');\n    if (!isPdf) continue;\n    const buf = await this.helpers.getBinaryDataBuffer(i, key);\n    out.push({ json: { pdf_base64: buf.toString('base64'), source_name: meta.fileName || 'upload.pdf' } });\n  }\n}\nreturn out;"
+      },
+      "name": "Pick PDF attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "id": "69330a35-7083-56c3-9d00-ef143a154a8a"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-url",
+              "name": "mcp_url",
+              "value": "http://invoice-mcp:8787/mcp",
+              "type": "string"
+            },
+            {
+              "id": "cfg-appr",
+              "name": "approver_name",
+              "value": "aishu",
+              "type": "string"
+            },
+            {
+              "id": "cfg-slack",
+              "name": "approver_slack_id",
+              "value": "U0000000000",
+              "type": "string"
+            },
+            {
+              "id": "cfg-rev",
+              "name": "review_channel",
+              "value": "#ap-review",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        0
+      ],
+      "id": "65626d30-ffe6-5648-8805-5789a4a42e65"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').item.json.mcp_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json, text/event-stream"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jsonrpc: '2.0', id: $execution.id, method: 'tools/call', params: { name: 'extract_invoice', arguments: { pdf_base64: $json.pdf_base64, source_name: $json.source_name } } }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "name": "Extract invoice (MCP, read token)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ],
+      "id": "afdf5580-2fba-5c00-b977-b719a26504a8",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Invoice MCP (read)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Unwrap the JSON-RPC reply from the MCP server. A tool error (e.g. Claude declined,\n// or the reply was cut off) is thrown on purpose so the Error workflow alerts a person.\nconst r = $json;\nif (r.error) throw new Error('MCP error: ' + r.error.message);\nif (!r.result) throw new Error('MCP reply had no result');\nif (r.result.isError) throw new Error('extract_invoice failed: ' + (r.result.content?.[0]?.text || 'unknown'));\nconst s = r.result.structuredContent ?? JSON.parse(r.result.content[0].text);\nconst f = s.fields;\nreturn { json: {\n  id: s.id,\n  all_checks_passed: s.all_checks_passed,\n  failed_checks: s.failed_checks,\n  label: s.label,\n  cost_usd: s.cost_usd,\n  vendor: f.vendor_name,\n  invoice_number: f.invoice_number,\n  document_type: f.document_type,\n  total: f.total,\n  currency: f.currency,\n  due_date: f.due_date,\n  po_number: f.po_number,\n  // \"Drafts cite their sources\": the approval message shows where each key value was read.\n  sources: (f.sources || []).map(x => `${x.field}: p.${x.page} \"${x.quote}\"`).join('\\n'),\n} };"
+      },
+      "name": "Read MCP result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -100
+      ],
+      "id": "a1373b5f-dcf0-5d1b-be3f-44092e9c4750"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3c88e2eb-32ca-5b2d-9ec5-f84b2bfe5644",
+              "leftValue": "={{ $json.all_checks_passed === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "All checks passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        0
+      ],
+      "id": "f912f9d2-74cd-5176-aaa9-df320c8edc3b"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Config').item.json.approver_slack_id }}"
+        },
+        "message": "={{ '*Invoice needs your approval*\\n' + $json.vendor + ' ' + $json.invoice_number + ' (' + $json.document_type + ')\\n' + 'Total: ' + $json.currency + ' ' + $json.total + ' | Due: ' + ($json.due_date || 'none') + ' | PO: ' + ($json.po_number || 'none') + '\\n' + 'All checks passed.\\n\\nSources:\\n' + $json.sources + '\\n\\n' + $json.label + (($json.cost_usd !== null) ? ' | extraction cost $' + $json.cost_usd.toFixed(4) : '') + '\\nRecord: ' + $json.id }}",
+        "responseType": "approval",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "approveLabel": "Approve and file",
+            "disapproveLabel": "Reject"
+          }
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "limitType": "afterTimeInterval",
+              "resumeAmount": 3,
+              "resumeUnit": "days"
+            }
+          }
+        }
+      },
+      "name": "Ask approver in Slack (wait)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1560,
+        -100
+      ],
+      "id": "d289d512-953a-543d-9ceb-f1a97280941d"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d92e2b82-07e4-532d-9ab5-436a3230c39f",
+              "leftValue": "={{ $json.data?.approved === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1820,
+        0
+      ],
+      "id": "a15a29b6-b581-519b-a786-1c98e344d12b"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0c50e817-79d8-5b66-8b0b-aadbff37a3f2",
+              "leftValue": "={{ $json.data?.approved === false }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Rejected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        -100
+      ],
+      "id": "6a0c71d1-38e4-5fef-9bba-36a73be69879"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').item.json.mcp_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json, text/event-stream"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jsonrpc: '2.0', id: $execution.id, method: 'tools/call', params: { name: 'approve_invoice', arguments: { invoice_id: $('Read MCP result').item.json.id, approver: $('Config').item.json.approver_name, note: 'Approved in Slack' } } }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "name": "approve_invoice (MCP, approver token)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        100
+      ],
+      "id": "7b8ef346-28ee-5efa-beed-87a301a8d388",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Invoice MCP (approver)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').item.json.mcp_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json, text/event-stream"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jsonrpc: '2.0', id: $execution.id, method: 'tools/call', params: { name: 'reject_invoice', arguments: { invoice_id: $('Read MCP result').item.json.id, approver: $('Config').item.json.approver_name, reason: 'Rejected in Slack' } } }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "name": "reject_invoice (MCP, approver token)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2340,
+        0
+      ],
+      "id": "dc6b3817-f2a7-5ba0-b7cc-5bf97f1f581d",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Invoice MCP (approver)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// The HTTP call can succeed while the tool says no (e.g. invoice already decided, or the\n// approver isn't on the server's APPROVERS list). Fail loudly so the Error workflow alerts.\nconst r = $json;\nif (r.error) throw new Error('MCP error: ' + r.error.message);\nif (r.result?.isError) throw new Error('Decision not saved: ' + (r.result.content?.[0]?.text || 'unknown'));\nreturn { json: r.result.structuredContent };"
+      },
+      "name": "Confirm decision saved",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        0
+      ],
+      "id": "eecfcab4-3f4e-5606-8a78-e69ef6ff4eae"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Config').item.json.review_channel }}"
+        },
+        "text": "={{ ':warning: *Invoice failed checks, not sent for approval*\\n' + $json.vendor + ' ' + $json.invoice_number + ', ' + $json.currency + ' ' + $json.total + '\\n' + $json.failed_checks.join('\\n') + '\\n\\nIt is staged as pending. To approve anyway, an approver uses approve_invoice with an override_reason (e.g. from Claude). Record: ' + $json.id }}",
+        "otherOptions": {}
+      },
+      "name": "Post to review channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1560,
+        100
+      ],
+      "id": "dd28e522-ebff-5ba5-a327-d37360f7d98e"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Config').item.json.review_channel }}"
+        },
+        "text": "={{ ':rotating_light: Invoice extract call failed after 3 tries: ' + ($json.error?.message || 'unknown error') + '\\nFile: ' + $('Config').item.json.source_name + '. Nothing was staged or filed.' }}",
+        "otherOptions": {}
+      },
+      "name": "Alert: extract call failed",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1040,
+        100
+      ],
+      "id": "ae1a6260-5431-5733-9b20-8acf022fc100"
+    }
+  ],
+  "connections": {
+    "New invoice email (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "Pick PDF attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice upload (webhook)": {
+      "main": [
+        [
+          {
+            "node": "Pick PDF attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick PDF attachments": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Extract invoice (MCP, read token)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract invoice (MCP, read token)": {
+      "main": [
+        [
+          {
+            "node": "Read MCP result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert: extract call failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read MCP result": {
+      "main": [
+        [
+          {
+            "node": "All checks passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All checks passed?": {
+      "main": [
+        [
+          {
+            "node": "Ask approver in Slack (wait)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post to review channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask approver in Slack (wait)": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "approve_invoice (MCP, approver token)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rejected?": {
+      "main": [
+        [
+          {
+            "node": "reject_invoice (MCP, approver token)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "approve_invoice (MCP, approver token)": {
+      "main": [
+        [
+          {
+            "node": "Confirm decision saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "reject_invoice (MCP, approver token)": {
+      "main": [
+        [
+          {
+            "node": "Confirm decision saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "InvIntakeErrAlrt1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": false
+  },
+  "pinData": {},
+  "tags": []
+}

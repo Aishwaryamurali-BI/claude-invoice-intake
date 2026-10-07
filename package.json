@@ -1,0 +1,38 @@
+{
+  "name": "claude-invoice-intake",
+  "version": "0.1.0",
+  "description": "Invoice PDF intake with Claude structured outputs, rule-based checks, an MCP server with human approval, and an n8n workflow.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Aishwarya Murali",
+  "private": true,
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "demo": "tsx src/demo.ts",
+    "dev": "tsx src/mcp-server.ts",
+    "start": "node dist/mcp-server.js",
+    "eval": "tsx evals/run.ts",
+    "eval:generate": "tsx evals/generate.ts",
+    "eval:selftest": "tsx evals/run.ts --selftest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "better-sqlite3": "^13.0.3",
+    "express": "^5.2.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "@types/pdfkit": "^0.17.6",
+    "pdfkit": "^0.20.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "id": "01-basic-usd",
+  "description": "Clean single-page USD invoice with a valid PO. Every check should pass.",
+  "tags": [
+    "baseline",
+    "single-page",
+    "usd"
+  ],
+  "ground_truth_source": "hand-authored case spec in evals/generate.ts; the PDF is rendered from the same spec",
+  "context": {
+    "knownInvoices": [],
+    "purchaseOrders": [
+      "PO-4410",
+      "PO-4415",
+      "PO-4420",
+      "PO-4431",
+      "PO-4437",
+      "PO-4452",
+      "PO-4460"
+    ]
+  },
+  "fields": {
+    "document_type": "invoice",
+    "vendor_name": "Example Pallet Supply LLC",
+    "invoice_number": "INV-2026-0912",
+    "issue_date": "2026-09-14",
+    "due_date": "2026-10-14",
+    "currency": "USD",
+    "po_number": "PO-4410",
+    "line_items": [
+      {
+        "description": "Heat-treated wooden pallet 48x40",
+        "quantity": 120,
+        "unit_price": 14.5,
+        "amount": 1740
+      },
+      {
+        "description": "Pallet collar, hinged",
+        "quantity": 40,
+        "unit_price": 9.25,
+        "amount": 370
+      },
+      {
+        "description": "Delivery charge",
+        "quantity": 1,
+        "unit_price": 180,
+        "amount": 180
+      }
+    ],
+    "subtotal": 2290,
+    "tax": 183.2,
+    "total": 2473.2,
+    "sources": [
+      {
+        "field": "vendor_name",
+        "page": 1,
+        "quote": "Example Pallet Supply LLC"
+      },
+      {
+        "field": "invoice_number",
+        "page": 1,
+        "quote": "Invoice No.: INV-2026-0912"
+      },
+      {
+        "field": "issue_date",
+        "page": 1,
+        "quote": "Invoice Date: September 14, 2026"
+      },
+      {
+        "field": "due_date",
+        "page": 1,
+        "quote": "Due Date: October 14, 2026"
+      },
+      {
+        "field": "po_number",
+        "page": 1,
+        "quote": "PO Number: PO-4410"
+      },
+      {
+        "field": "currency",
+        "page": 1,
+        "quote": "Currency: USD"
+      },
+      {
+        "field": "subtotal",
+        "page": 1,
+        "quote": "Subtotal: $2,290.00"
+      },
+      {
+        "field": "tax",
+        "page": 1,
+        "quote": "Tax (8%): $183.20"
+      },
+      {
+        "field": "total",
+        "page": 1,
+        "quote": "Total due: $2,473.20"
+      }
+    ]
+  },
+  "expected_checks": {
+    "line_items_sum_to_subtotal": true,
+    "subtotal_plus_tax_equals_total": true,
+    "dates_valid_and_due_on_or_after_issue": true,
+    "po_exists": true,
+    "not_duplicate": true,
+    "key_fields_cited": true
+  }
+}

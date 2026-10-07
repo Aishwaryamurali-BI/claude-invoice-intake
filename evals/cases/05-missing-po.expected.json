@@ -1,0 +1,97 @@
+{
+  "id": "05-missing-po",
+  "description": "Invoice with no PO number printed anywhere.",
+  "tags": [
+    "missing-po",
+    "usd"
+  ],
+  "ground_truth_source": "hand-authored case spec in evals/generate.ts; the PDF is rendered from the same spec",
+  "context": {
+    "knownInvoices": [],
+    "purchaseOrders": [
+      "PO-4410",
+      "PO-4415",
+      "PO-4420",
+      "PO-4431",
+      "PO-4437",
+      "PO-4452",
+      "PO-4460"
+    ]
+  },
+  "fields": {
+    "document_type": "invoice",
+    "vendor_name": "Testbed Labels Co.",
+    "invoice_number": "TL-7781",
+    "issue_date": "2026-09-19",
+    "due_date": "2026-10-19",
+    "currency": "USD",
+    "po_number": null,
+    "line_items": [
+      {
+        "description": "Thermal shipping labels 4x6, roll of 500",
+        "quantity": 80,
+        "unit_price": 12.99,
+        "amount": 1039.2
+      },
+      {
+        "description": "Label printer ribbon",
+        "quantity": 10,
+        "unit_price": 24.5,
+        "amount": 245
+      }
+    ],
+    "subtotal": 1284.2,
+    "tax": 89.89,
+    "total": 1374.09,
+    "sources": [
+      {
+        "field": "vendor_name",
+        "page": 1,
+        "quote": "Testbed Labels Co."
+      },
+      {
+        "field": "invoice_number",
+        "page": 1,
+        "quote": "Invoice No.: TL-7781"
+      },
+      {
+        "field": "issue_date",
+        "page": 1,
+        "quote": "Invoice Date: September 19, 2026"
+      },
+      {
+        "field": "due_date",
+        "page": 1,
+        "quote": "Due Date: October 19, 2026"
+      },
+      {
+        "field": "currency",
+        "page": 1,
+        "quote": "Currency: USD"
+      },
+      {
+        "field": "subtotal",
+        "page": 1,
+        "quote": "Subtotal: $1,284.20"
+      },
+      {
+        "field": "tax",
+        "page": 1,
+        "quote": "Tax (7%): $89.89"
+      },
+      {
+        "field": "total",
+        "page": 1,
+        "quote": "Total due: $1,374.09"
+      }
+    ]
+  },
+  "expected_checks": {
+    "line_items_sum_to_subtotal": true,
+    "subtotal_plus_tax_equals_total": true,
+    "dates_valid_and_due_on_or_after_issue": true,
+    "po_exists": false,
+    "not_duplicate": true,
+    "key_fields_cited": true
+  }
+}

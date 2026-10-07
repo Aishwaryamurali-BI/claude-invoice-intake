@@ -1,0 +1,65 @@
+{
+  "note": "Synthetic, fictional invoices for testing only.",
+  "cases": [
+    {
+      "id": "01-basic-usd",
+      "pdf": "01-basic-usd.pdf",
+      "expected": "01-basic-usd.expected.json",
+      "sha256": "d40705ca33d916db43c46bbfac45e37b39ddff1bcf2a75c845527d8fe3964f43"
+    },
+    {
+      "id": "02-eur-vat-de-format",
+      "pdf": "02-eur-vat-de-format.pdf",
+      "expected": "02-eur-vat-de-format.expected.json",
+      "sha256": "1be9bcc1fcc124b557bfd55bdf102d5fd8b20a39641e38b7d3b342095affc064"
+    },
+    {
+      "id": "03-multipage-usd",
+      "pdf": "03-multipage-usd.pdf",
+      "expected": "03-multipage-usd.expected.json",
+      "sha256": "c6aa9dce8d4bd71b100e4f5a07f68701ffa991ec3169486b46ddd5ea9191a039"
+    },
+    {
+      "id": "04-credit-note",
+      "pdf": "04-credit-note.pdf",
+      "expected": "04-credit-note.expected.json",
+      "sha256": "2ba48eb46e4710b3aeec2f348bb6f52f053ad375a736df7e06f5e507b102dd85"
+    },
+    {
+      "id": "05-missing-po",
+      "pdf": "05-missing-po.pdf",
+      "expected": "05-missing-po.expected.json",
+      "sha256": "73c4b440b345c68ef6e878553bb7b08a180af04e475044290eab9103fa31b80c"
+    },
+    {
+      "id": "06-bad-totals-gbp",
+      "pdf": "06-bad-totals-gbp.pdf",
+      "expected": "06-bad-totals-gbp.expected.json",
+      "sha256": "c710c7536589169f3f27118e478a1a4b63e1deb6e17dc9d77d0cd71bf0378d96"
+    },
+    {
+      "id": "07-duplicate",
+      "pdf": "07-duplicate.pdf",
+      "expected": "07-duplicate.expected.json",
+      "sha256": "a543bff23045cdd1a85b1b018f100d64e60bfd0c19ce1fe92130de526cc3aee2"
+    },
+    {
+      "id": "08-due-before-issue",
+      "pdf": "08-due-before-issue.pdf",
+      "expected": "08-due-before-issue.expected.json",
+      "sha256": "a8164d31b5cf85cefafc0e19dd52baefc3bf702b65c184663fcec8d18060a46d"
+    },
+    {
+      "id": "09-jpy-no-decimals",
+      "pdf": "09-jpy-no-decimals.pdf",
+      "expected": "09-jpy-no-decimals.expected.json",
+      "sha256": "63bf68b42a419c5ee57be803b5a133fcb0ba2dddb2ca27d4f002b6f488089954"
+    },
+    {
+      "id": "10-unknown-po-with-injection",
+      "pdf": "10-unknown-po-with-injection.pdf",
+      "expected": "10-unknown-po-with-injection.expected.json",
+      "sha256": "9ef851f72aaad5ad3466fd47e670e42860b717cbaf797910df1396bf17dd4c12"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+# Self-hosted n8n + the invoice MCP server on one private network.
+# Untested here (no Docker on the machine this was written on). The n8n image tag
+# matches the n8n version the workflow JSON was import-tested against (2.42.3);
+# check that tag exists before relying on it.
+#
+#   cp .env.example .env   # fill in tokens and keys
+#   docker compose up -d --build
+#   n8n UI: http://localhost:5678   MCP server (for Claude Code): http://localhost:8787/mcp
+services:
+  invoice-mcp:
+    build: .
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8787"
+      DATA_DIR: /data
+      # Host headers accepted (DNS-rebinding protection): the compose service name for n8n,
+      # and localhost for Claude Code on this machine.
+      ALLOWED_HOSTS: invoice-mcp,localhost,127.0.0.1
+    volumes:
+      - invoice-data:/data
+    ports:
+      - "127.0.0.1:8787:8787" # loopback only; put a TLS proxy in front before exposing it
+    restart: unless-stopped
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.42.3
+    environment:
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-America/Denver}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      # Keep successful executions out of the database (also set per workflow).
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./n8n:/workflows:ro
+    ports:
+      - "127.0.0.1:5678:5678"
+    depends_on:
+      - invoice-mcp
+    restart: unless-stopped
+
+volumes:
+  invoice-data:
+  n8n-data:

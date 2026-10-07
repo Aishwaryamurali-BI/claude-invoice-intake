@@ -1,0 +1,101 @@
+{
+  "id": "07-duplicate",
+  "description": "Valid-looking invoice whose number was already received from this vendor.",
+  "tags": [
+    "duplicate",
+    "usd"
+  ],
+  "ground_truth_source": "hand-authored case spec in evals/generate.ts; the PDF is rendered from the same spec",
+  "context": {
+    "knownInvoices": [
+      {
+        "vendor_name": "Sample Freight Lines, Inc",
+        "invoice_number": "SFL-117950"
+      }
+    ],
+    "purchaseOrders": [
+      "PO-4410",
+      "PO-4415",
+      "PO-4420",
+      "PO-4431",
+      "PO-4437",
+      "PO-4452",
+      "PO-4460"
+    ]
+  },
+  "fields": {
+    "document_type": "invoice",
+    "vendor_name": "Sample Freight Lines Inc.",
+    "invoice_number": "SFL-117950",
+    "issue_date": "2026-09-05",
+    "due_date": "2026-09-20",
+    "currency": "USD",
+    "po_number": "PO-4437",
+    "line_items": [
+      {
+        "description": "FTL shipment Testville -> Fakeport",
+        "quantity": 1,
+        "unit_price": 1860,
+        "amount": 1860
+      }
+    ],
+    "subtotal": 1860,
+    "tax": 0,
+    "total": 1860,
+    "sources": [
+      {
+        "field": "vendor_name",
+        "page": 1,
+        "quote": "Sample Freight Lines Inc."
+      },
+      {
+        "field": "invoice_number",
+        "page": 1,
+        "quote": "Invoice No.: SFL-117950"
+      },
+      {
+        "field": "issue_date",
+        "page": 1,
+        "quote": "Invoice Date: 2026-09-05"
+      },
+      {
+        "field": "due_date",
+        "page": 1,
+        "quote": "Due Date: 2026-09-20"
+      },
+      {
+        "field": "po_number",
+        "page": 1,
+        "quote": "PO Number: PO-4437"
+      },
+      {
+        "field": "currency",
+        "page": 1,
+        "quote": "Currency: USD"
+      },
+      {
+        "field": "subtotal",
+        "page": 1,
+        "quote": "Subtotal: $1,860.00"
+      },
+      {
+        "field": "tax",
+        "page": 1,
+        "quote": "Tax (0%): $0.00"
+      },
+      {
+        "field": "total",
+        "page": 1,
+        "quote": "Total due: $1,860.00"
+      }
+    ]
+  },
+  "expected_checks": {
+    "line_items_sum_to_subtotal": true,
+    "subtotal_plus_tax_equals_total": true,
+    "dates_valid_and_due_on_or_after_issue": true,
+    "po_exists": true,
+    "not_duplicate": false,
+    "key_fields_cited": true
+  }
+}

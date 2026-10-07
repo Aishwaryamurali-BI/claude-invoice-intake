@@ -1,0 +1,102 @@
+{
+  "id": "08-due-before-issue",
+  "description": "Due date printed a month before the issue date (vendor typo).",
+  "tags": [
+    "bad-dates",
+    "usd"
+  ],
+  "ground_truth_source": "hand-authored case spec in evals/generate.ts; the PDF is rendered from the same spec",
+  "context": {
+    "knownInvoices": [],
+    "purchaseOrders": [
+      "PO-4410",
+      "PO-4415",
+      "PO-4420",
+      "PO-4431",
+      "PO-4437",
+      "PO-4452",
+      "PO-4460"
+    ]
+  },
+  "fields": {
+    "document_type": "invoice",
+    "vendor_name": "Dummy Shrinkwrap Ltd",
+    "invoice_number": "DS-3302",
+    "issue_date": "2026-09-20",
+    "due_date": "2026-08-20",
+    "currency": "USD",
+    "po_number": "PO-4452",
+    "line_items": [
+      {
+        "description": "Shrink wrap 18 in x 1500 ft",
+        "quantity": 60,
+        "unit_price": 28.75,
+        "amount": 1725
+      },
+      {
+        "description": "Dispenser handle",
+        "quantity": 6,
+        "unit_price": 15,
+        "amount": 90
+      }
+    ],
+    "subtotal": 1815,
+    "tax": 108.9,
+    "total": 1923.9,
+    "sources": [
+      {
+        "field": "vendor_name",
+        "page": 1,
+        "quote": "Dummy Shrinkwrap Ltd"
+      },
+      {
+        "field": "invoice_number",
+        "page": 1,
+        "quote": "Invoice No.: DS-3302"
+      },
+      {
+        "field": "issue_date",
+        "page": 1,
+        "quote": "Invoice Date: September 20, 2026"
+      },
+      {
+        "field": "due_date",
+        "page": 1,
+        "quote": "Due Date: August 20, 2026"
+      },
+      {
+        "field": "po_number",
+        "page": 1,
+        "quote": "PO Number: PO-4452"
+      },
+      {
+        "field": "currency",
+        "page": 1,
+        "quote": "Currency: USD"
+      },
+      {
+        "field": "subtotal",
+        "page": 1,
+        "quote": "Subtotal: $1,815.00"
+      },
+      {
+        "field": "tax",
+        "page": 1,
+        "quote": "Tax (6%): $108.90"
+      },
+      {
+        "field": "total",
+        "page": 1,
+        "quote": "Total due: $1,923.90"
+      }
+    ]
+  },
+  "expected_checks": {
+    "line_items_sum_to_subtotal": true,
+    "subtotal_plus_tax_equals_total": true,
+    "dates_valid_and_due_on_or_after_issue": false,
+    "po_exists": true,
+    "not_duplicate": true,
+    "key_fields_cited": true
+  }
+}
