@@ -1,6 +1,6 @@
 # How it works: a study guide
 
-This guide walks through the repo file by file, explains why each choice was made, and ends with interview questions answered from this code. Read it with the code open beside it.
+This guide walks through the repo file by file and explains why each choice was made. Read it with the code open beside it.
 
 ## The flow in one paragraph
 
@@ -91,7 +91,7 @@ Groups invoices by due date into an overdue bucket plus N weeks (default 4). App
 - Tokens come from environment variables as `name=token` pairs: `READ_TOKENS` (scope `read`) and `APPROVER_TOKENS` (scopes `read` + `approve`). Startup fails if a token is under 32 characters or two principals share a name or token.
 - **Constant-time compare:** both the presented token and each stored token are SHA-256 hashed, then compared with `crypto.timingSafeEqual`, and the loop checks every entry without stopping early. A plain `===` can return faster when the first characters differ, which in theory lets an attacker guess a token byte by byte from response times.
 - Tokens are never logged, never put in error messages and never returned by a tool.
-- `checkApprover()`: a person's own token can only approve **as that person**. A service token (n8n) may name any human on the `APPROVERS` list, because it is relaying a Slack click. That is a trust decision: whoever holds the n8n approver token could approve without a click, which is why that token lives only in the two decision nodes.
+- `checkApprover()`: a person's own token can only approve **as that person**. A service token listed in `RELAY_PRINCIPALS` (n8n) may name any human on the `APPROVERS` list, because it is relaying a Slack click. That is a trust decision: whoever holds the n8n approver token could approve without a click, which is why that token lives only in the two decision nodes. An approver token that is on neither list fails at startup, so a name left off `APPROVERS` can never approve as someone else by accident.
 
 ### `src/mcp-server.ts`: the MCP server
 
@@ -158,31 +158,3 @@ Why not the Citations feature for the sources? Citations can't be combined with 
 - Scopes decide which tools exist for that caller, not just which ones are allowed.
 - The Claude client stores the token in its connector config (`claude mcp add ... --header`). The model sees tool names, inputs and results, never the header.
 - The Anthropic API key sits only in the MCP server's environment. n8n never has it, and nothing in n8n can call Claude directly.
-
----
-
-## Likely interview questions
-
-**1. Walk me through what happens when an invoice email arrives.**
-The IMAP trigger fires, a Code node turns each PDF attachment into base64, and n8n POSTs a JSON-RPC `tools/call` for `extract_invoice` to the MCP server with a read-only token. The server sends the PDF to Claude Opus 5.5 with a zod schema as the structured output, checks `stop_reason`, parses the reply, runs six rule checks in code, and stages the invoice as pending with its cost. Back in n8n, if every check passed the approver gets a Slack DM with the fields, the page and quote for each value, and Approve/Reject buttons. A click calls `approve_invoice` with the approver token, and only that writes the file to `filed/`.
-
-**2. Why structured outputs instead of tool use?**
-I want an answer in a fixed shape, not a decision about whether to call something, and structured outputs constrain the reply to the schema directly. The zod schema does double duty: it's sent as the format and it validates the reply. On Opus 5.5 you can't force a specific tool anyway; that's a 400. One trade-off I found: the SDK helper turns enums into description hints, so zod is what really enforces those fields. I call `create` and parse myself, rather than `parse`, so a refusal or a truncated reply still gives me a reason and a cost.
-
-**3. Why are the checks plain code and not Claude?**
-They're exact problems: sums, date comparisons, lookups. Code is right every time, free, deterministic and unit-tested. The model does what needs reading, finding numbers on a messy page. I also tell it to copy numbers as printed and not fix them, so if a vendor's totals are wrong the rule catches it instead of the model hiding it. That's case 06 in the evals.
-
-**4. How do you know the extraction is accurate?**
-Ten synthetic invoices with hand-written ground truth, covering a two-page invoice, a credit note, EUR with German number formats, JPY, a missing PO, bad totals, a duplicate, a due date before the issue date, and a prompt-injection note. `npm run eval` reports per-field accuracy, rule-check agreement and citation pages. I check the grader first with a self-test: the ground truth must score 100% and an empty answer must fail. I haven't run it live yet, so I don't quote a number. With 10 cases one miss is 10 points, so it's a regression check, not a leaderboard.
-
-**5. How does auth work, and how do you keep credentials away from the model?**
-Each user or service gets a bearer token from the environment, with read or approver scope, compared in constant time and never logged. The server builds the tool list per request from the token's scopes, so a read token doesn't even see approve or reject, and the handlers re-check. A person can only approve as themselves; the n8n service token can relay a listed human's Slack click. The model sees tool results only; the token sits in the connector config. Invoice text is treated as data: the system prompt says to ignore instructions inside the document, and even if a model obeyed one, the extract path has no tool that can approve. Eval case 10 has exactly that kind of note.
-
-**6. Is prompt caching working?**
-I mark the system prompt for caching because it's identical for every invoice, but I don't assume it works. Opus 5.5 needs at least 512 tokens and my prompt is roughly 600 by estimate, so it's borderline. The cache expires after 5 minutes, and the PDF can't be cached because it changes. I'd verify it from `cache_creation_input_tokens` and `cache_read_input_tokens` on two back-to-back calls; the eval report totals cache reads. And the saving is small anyway, because the PDF is most of the input.
-
-**7. What happens when something fails?**
-API 429/5xx: the SDK retries with backoff, and n8n retries the HTTP call 3 times, 5 seconds apart. Final failure goes down the error output to a Slack alert. Claude declines: the server-side fallback tries another model, the result is labelled with the model that served it, and a final refusal becomes a tool error that n8n turns into an alert. Truncated reply: error, never half-parsed. Nobody clicks in 3 days: the invoice stays pending; a timeout never approves or rejects. Any unhandled failure triggers the Error workflow. A retried approve can't file twice, and a retried extract shows up as a duplicate.
-
-**8. What does it cost per invoice, and how do you know?**
-Every extraction computes its cost from the API's own token counts: uncached input at $4 per million, output (including thinking) at $20, cache reads at $0.20, cache writes at 1.25x input. It returns that with the result, stores it on the record and shows it in the Slack message. I don't have a real per-invoice number yet because I haven't run it live; `npm run eval` gives cost per invoice and total, and that's the number I'd quote. Effort `low` is there to keep thinking tokens, which bill as output, down.

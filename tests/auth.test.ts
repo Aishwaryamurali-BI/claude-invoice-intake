@@ -52,6 +52,14 @@ describe("TokenAuth", () => {
     expect(auth.checkApprover(n8n, "mallory")).toMatch(/not in APPROVERS/);
     expect(auth.checkApprover(reader, "aishu")).toMatch(/read-only/);
   });
+
+  it("an approver token that is neither a listed human nor a declared relay fails at startup", () => {
+    // Before this check, a token left off APPROVERS was silently treated as a relay and could approve as anyone.
+    expect(() => new TokenAuth({ APPROVER_TOKENS: `svc=${"x".repeat(40)}`, APPROVERS: "aishu" })).toThrow(/neither APPROVERS nor RELAY_PRINCIPALS/);
+    const declared = new TokenAuth({ APPROVER_TOKENS: `svc=${"x".repeat(40)}`, APPROVERS: "aishu", RELAY_PRINCIPALS: "svc" });
+    expect(declared.checkApprover({ name: "svc", scopes: ["read", "approve"] }, "aishu")).toBeNull();
+    expect(declared.checkApprover({ name: "svc", scopes: ["read", "approve"] }, "svc")).toMatch(/not in APPROVERS/);
+  });
 });
 
 describe("HTTP transport auth (real Streamable HTTP server on a random port)", () => {

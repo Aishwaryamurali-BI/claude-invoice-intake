@@ -4,16 +4,18 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { TokenAuth, type Principal } from "../src/auth.js";
 import { payablesForecast } from "../src/forecast.js";
-import { createMcpServer } from "../src/mcp-server.js";
+import { extractInvoice } from "../src/extract.js";
+import { createMcpServer, type Extractor } from "../src/mcp-server.js";
 import { ApprovalError, type InvoiceStore } from "../src/store.js";
 import { TEST_AUTH_ENV, casePdf, tempStore } from "./helpers.js";
 
 const auth = new TokenAuth(TEST_AUTH_ENV);
 const READER: Principal = { name: "n8n-reader", scopes: ["read"] };
 const AISHU: Principal = { name: "aishu", scopes: ["read", "approve"] };
+const N8N: Principal = { name: "n8n-approver", scopes: ["read", "approve"] };
 
-async function client(store: InvoiceStore, principal: Principal) {
-  const server = createMcpServer({ store, auth, today: () => "2026-10-01" }, principal);
+async function client(store: InvoiceStore, principal: Principal, extract?: Extractor) {
+  const server = createMcpServer({ store, auth, today: () => "2026-10-01", extract }, principal);
   const [a, b] = InMemoryTransport.createLinkedPair();
   await server.connect(b);
   const c = new Client({ name: "t", version: "0" });
@@ -113,6 +115,51 @@ describe("approval gate", () => {
     expect(second.failed_checks.join()).toMatch(/not_duplicate/);
     await call(a, "reject_invoice", { invoice_id: first.id, approver: "aishu", reason: "test" });
     expect(store.knownInvoices()).toHaveLength(1); // only the second, still pending
+  });
+
+  it("a retried approve by the same approver is a no-op, not an error; a different decision is refused", async () => {
+    // n8n retries the HTTP call on a timeout. The second call must not raise a false failure alert.
+    const store = tempStore();
+    const a = await client(store, AISHU);
+    const n8n = await client(store, N8N);
+    const ex = await extract(a, "01-basic-usd");
+    const first = await call(n8n, "approve_invoice", { invoice_id: ex.id, approver: "aishu" });
+    const again = await call(n8n, "approve_invoice", { invoice_id: ex.id, approver: "aishu" });
+    expect(first.isError).toBeFalsy();
+    expect(again.isError).toBeFalsy();
+    expect(again.structuredContent).toEqual(first.structuredContent);
+    expect(filedCount(store)).toBe(1);
+    expect((await call(n8n, "approve_invoice", { invoice_id: ex.id, approver: "sam" })).isError).toBe(true);
+    expect((await call(n8n, "reject_invoice", { invoice_id: ex.id, approver: "aishu", reason: "changed my mind" })).isError).toBe(true);
+  });
+
+  it("a duplicate approved with an override is filed beside the first copy, never over it", async () => {
+    const store = tempStore();
+    const a = await client(store, AISHU);
+    const first = await extract(a, "01-basic-usd");
+    const second = await extract(a, "01-basic-usd");
+    await call(a, "approve_invoice", { invoice_id: first.id, approver: "aishu" });
+    const res = await call(a, "approve_invoice", { invoice_id: second.id, approver: "aishu", override_reason: "vendor re-sent it, both are real" });
+    expect(res.isError).toBeFalsy();
+    const paths = [store.get(first.id)!.filed_path, store.get(second.id)!.filed_path];
+    expect(paths[0]).not.toEqual(paths[1]);
+    expect(paths.every((p) => existsSync(p!))).toBe(true);
+    expect(filedCount(store)).toBe(2);
+  });
+
+  it("re-runs the duplicate check after the model call, so a copy staged meanwhile is caught", async () => {
+    // The known-invoice list is read before the (slow) model call. Simulate another run staging the
+    // same invoice while this call is in flight: the extractor itself stages a copy before returning.
+    const store = tempStore();
+    const racing: Extractor = async (pdf, context) => {
+      const r = await extractInvoice(pdf, { context }); // keyless replay
+      store.stage({ pdf, sourceName: "the other run", mode: r.mode, label: r.label, fields: r.fields, checks: r.checks, allChecksPassed: r.allChecksPassed, costUsd: r.costUsd });
+      return r; // r.checks still says "first time seen"
+    };
+    const r = await client(store, READER, racing);
+    const out = (await call(r, "extract_invoice", { pdf_base64: casePdf("01-basic-usd").toString("base64") })).structuredContent as { all_checks_passed: boolean; failed_checks: string[] };
+    expect(out.all_checks_passed).toBe(false);
+    expect(out.failed_checks.join()).toMatch(/not_duplicate/);
   });
 
   it("rejects input that isn't a PDF", async () => {

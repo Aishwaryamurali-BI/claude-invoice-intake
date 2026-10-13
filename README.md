@@ -42,7 +42,7 @@ flowchart LR
 | Least privilege on every connector | Two token scopes. A read token's `tools/list` doesn't even contain the approve/reject tools (the server is built per request from the token's scopes), and the write handlers check again. In n8n the extract call holds only a read token; only the two decision nodes hold the approver token. The Anthropic key lives only in the MCP server's environment, not in n8n. Tokens are compared in constant time and never logged or returned. |
 | Client data never trains a model | No fine-tuning or training anywhere. Claude is called through the API, where Anthropic's commercial terms say customer content isn't used for training by default (confirm against the current terms for your account). The server logs who called which tool, never invoice contents. The n8n workflow doesn't save successful executions. Evals use only synthetic invoices. |
 | Every agent ships with an eval set and a cost line | `evals/` has 10 synthetic invoices with hand-written ground truth, including the hard cases. Every extraction returns `usage` and `costUsd` computed from the API's token counts (cache reads and writes included), and the cost is stored on the record. The eval report gives total cost, cost per invoice and cache-read tokens. |
-| Drafts and summaries cite their sources | The schema makes Claude return a page number and verbatim quote for each key field. A rule (`key_fields_cited`) fails the invoice if a citation is missing or the quote doesn't contain the value. The Slack approval message shows the sources. |
+| Drafts and summaries cite their sources | The schema makes Claude return a page number and verbatim quote for each key field. A rule (`key_fields_cited`) fails the invoice if a citation is missing, or if the quote for the invoice or PO number doesn't contain that value. Whether the quote really appears on the cited page is measured by the eval's citation-page accuracy, not enforced in code. The Slack approval message shows the sources. |
 
 ## Run it
 
@@ -50,7 +50,7 @@ Needs Node 24.
 
 ```bash
 npm install
-npm test            # 57 tests, no API key needed
+npm test            # 63 tests, no API key needed
 npm run typecheck
 npm run demo        # whole flow through the real MCP tools, keyless
 ```
@@ -73,8 +73,9 @@ Then run the server:
 
 ```bash
 export READ_TOKENS="n8n-reader=$(openssl rand -hex 32)"
-export APPROVER_TOKENS="aishu=$(openssl rand -hex 32)"
-export APPROVERS=aishu
+export APPROVER_TOKENS="aishu=$(openssl rand -hex 32),n8n-approver=$(openssl rand -hex 32)"
+export APPROVERS=aishu                 # humans; each approves only as themselves
+export RELAY_PRINCIPALS=n8n-approver   # services that relay a listed human's Slack click
 npm run dev                              # http://127.0.0.1:8787/mcp
 ```
 

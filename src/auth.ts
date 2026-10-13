@@ -3,6 +3,11 @@
 //   READ_TOKENS="n8n-reader=<token>"                  -> scope "read"
 //   APPROVER_TOKENS="aishu=<token>,n8n-approver=<token>" -> scopes "read" + "approve"
 //   APPROVERS="aishu,sam"                              -> humans allowed to approve
+//   RELAY_PRINCIPALS="n8n-approver"                    -> services that may relay a listed human's click
+//
+// Every approver-scope token must be either a listed human (approves only as itself) or a
+// listed relay (may name any human in APPROVERS). Anything else fails at startup, so a token
+// left off both lists can never approve as anyone.
 //
 // Tokens live only in the environment. They are compared in constant time, and the
 // token value is never put in an error, a log line or a tool result.
@@ -43,11 +48,14 @@ function parseList(raw: string | undefined, scopes: Scope[], varName: string): T
   });
 }
 
+const nameList = (raw: string | undefined) => new Set((raw ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+
 export class TokenAuth {
   private entries: TokenEntry[];
   readonly approvers: Set<string>;
+  readonly relays: Set<string>;
 
-  constructor(env: { READ_TOKENS?: string; APPROVER_TOKENS?: string; APPROVERS?: string }) {
+  constructor(env: { READ_TOKENS?: string; APPROVER_TOKENS?: string; APPROVERS?: string; RELAY_PRINCIPALS?: string }) {
     this.entries = [
       ...parseList(env.READ_TOKENS, ["read"], "READ_TOKENS"),
       ...parseList(env.APPROVER_TOKENS, ["read", "approve"], "APPROVER_TOKENS"),
@@ -57,7 +65,13 @@ export class TokenAuth {
     if (new Set(names).size !== names.length) throw new AuthConfigError("token names must be unique");
     const digests = this.entries.map((e) => e.digest.toString("hex"));
     if (new Set(digests).size !== digests.length) throw new AuthConfigError("two principals share the same token");
-    this.approvers = new Set((env.APPROVERS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+    this.approvers = nameList(env.APPROVERS);
+    this.relays = nameList(env.RELAY_PRINCIPALS);
+    for (const e of this.entries) {
+      if (e.principal.scopes.includes("approve") && !this.approvers.has(e.principal.name) && !this.relays.has(e.principal.name)) {
+        throw new AuthConfigError(`approver token "${e.principal.name}" is in neither APPROVERS nor RELAY_PRINCIPALS`);
+      }
+    }
   }
 
   /** Returns the principal for an Authorization header value, or null. Checks every entry (no early exit). */
@@ -75,14 +89,14 @@ export class TokenAuth {
   /**
    * Decide whether `principal` may record a decision in the name of `approver`.
    * - A person approving with their own token can only approve as themselves.
-   * - A service token (e.g. n8n relaying a Slack click) may name any listed approver.
+   * - A listed relay (e.g. n8n relaying a Slack click) may name any listed approver.
+   * - Anyone else is refused, whatever name they give.
    */
   checkApprover(principal: Principal, approver: string): string | null {
     if (!principal.scopes.includes("approve")) return "this token is read-only";
     if (!this.approvers.has(approver)) return `"${approver}" is not in APPROVERS`;
-    if (this.approvers.has(principal.name) && principal.name !== approver) {
-      return `token belongs to ${principal.name}, who cannot approve as ${approver}`;
-    }
-    return null;
+    if (this.relays.has(principal.name)) return null;
+    if (principal.name === approver) return null;
+    return `token belongs to ${principal.name}, who cannot approve as ${approver}`;
   }
 }

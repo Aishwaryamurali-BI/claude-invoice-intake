@@ -33,4 +33,5 @@ export const TEST_AUTH_ENV = {
   READ_TOKENS: `n8n-reader=${TEST_TOKENS.reader}`,
   APPROVER_TOKENS: `aishu=${TEST_TOKENS.aishu},n8n-approver=${TEST_TOKENS.n8nApprover}`,
   APPROVERS: "aishu,sam",
+  RELAY_PRINCIPALS: "n8n-approver",
 };

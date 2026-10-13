@@ -18,7 +18,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod/v4";
 import { TokenAuth, type Principal } from "./auth.js";
 import { extractInvoice, type ExtractResult } from "./extract.js";
-import type { CheckContext } from "./checks.js";
+import { allPassed, refreshDuplicateCheck, type CheckContext } from "./checks.js";
 import { payablesForecast } from "./forecast.js";
 import { ApprovalError, InvoiceStore } from "./store.js";
 
@@ -72,14 +72,19 @@ export function createMcpServer(deps: ServerDeps, principal: Principal): McpServ
       try {
         const context = { knownInvoices: store.knownInvoices(), purchaseOrders: store.purchaseOrders() };
         const r = await extract(pdf, context);
+        // The duplicate list above was read before the model call, which can take a while. A second
+        // copy of the same invoice may have been staged meanwhile (an n8n retry, or the same email
+        // forwarded twice), so re-run that one check against the store as it is now, before staging.
+        const checks = refreshDuplicateCheck(r.checks, r.fields, store.knownInvoices());
+        const allChecksPassed = allPassed(checks);
         const rec = store.stage({
           pdf,
           sourceName: source_name ?? null,
           mode: r.mode,
           label: r.label,
           fields: r.fields,
-          checks: r.checks,
-          allChecksPassed: r.allChecksPassed,
+          checks,
+          allChecksPassed,
           costUsd: r.costUsd,
         });
         audit(principal, "extract_invoice", `staged ${rec.id} (${r.mode})`);
@@ -88,10 +93,10 @@ export function createMcpServer(deps: ServerDeps, principal: Principal): McpServ
           status: rec.status,
           mode: r.mode,
           label: r.label,
-          all_checks_passed: r.allChecksPassed,
-          failed_checks: r.checks.filter((c) => !c.passed).map((c) => `${c.name}: ${c.detail}`),
+          all_checks_passed: allChecksPassed,
+          failed_checks: checks.filter((c) => !c.passed).map((c) => `${c.name}: ${c.detail}`),
           fields: r.fields,
-          checks: r.checks,
+          checks,
           usage: r.usage,
           cost_usd: r.costUsd,
           served_model: r.servedModel,

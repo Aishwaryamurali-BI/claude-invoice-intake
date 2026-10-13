@@ -1,5 +1,5 @@
-// The eval's grader, checked on known-good and known-bad inputs (eval-audit: "harness
-// tested on known-good and known-bad"). No model is involved.
+// The eval's grader, checked on known-good and known-bad inputs: the ground truth must
+// score 100% and an empty extraction must fail. No model is involved.
 import { describe, expect, it } from "vitest";
 import { runChecks } from "../src/checks.js";
 import { grade, gradeFields, nullFields } from "../evals/grade.js";

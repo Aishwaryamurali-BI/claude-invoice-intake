@@ -110,6 +110,19 @@ describe("rule checks", () => {
     expect(vendorKey("Sample Freight Lines, Inc.")).toBe(vendorKey("sample freight lines inc"));
   });
 
+  it("keeps non-Latin vendor names apart instead of collapsing them to nothing", () => {
+    expect(vendorKey("株式会社サンプル")).not.toBe(vendorKey("株式会社テスト"));
+    expect(vendorKey("Müller GmbH")).toBe(vendorKey("müller gmbh"));
+    expect(vendorKey("株式会社サンプル")).not.toBe("");
+  });
+
+  it("allows one unit of rounding on a zero-decimal currency, one cent elsewhere", () => {
+    const jpy = { ...base(), currency: "JPY", line_items: [{ description: "a", quantity: 3, unit_price: 333, amount: 999 }], subtotal: 1000, tax: 100, total: 1100 };
+    expect(failed(jpy)).not.toContain("line_items_sum_to_subtotal"); // 999 vs 1000: one yen
+    expect(failed({ ...jpy, subtotal: 1001, total: 1101 })).toContain("line_items_sum_to_subtotal"); // two yen
+    expect(failed({ ...base(), subtotal: 26.5, total: 28.54 })).toContain("line_items_sum_to_subtotal"); // USD: one dollar off
+  });
+
   it("agrees with every eval case's expected verdicts on its ground truth", () => {
     const ids = ["01-basic-usd", "02-eur-vat-de-format", "03-multipage-usd", "04-credit-note", "05-missing-po", "06-bad-totals-gbp", "07-duplicate", "08-due-before-issue", "09-jpy-no-decimals", "10-unknown-po-with-injection"];
     for (const id of ids) {

@@ -1,12 +1,12 @@
 // Cost of one Claude call, computed from the token counts the API returns.
 //
-// Prices are USD per million tokens. Sources (claude-api skill, Oct 2026):
-//  - Opus 5.5: $4 input / $20 output, cache reads $0.20 (models.md, prompt-caching.md).
-//  - Opus 5 and Opus 4.8: $5 / $25 (models.md); cache reads use the general ~0.1x rule.
+// Prices are USD per million tokens, from Anthropic's model pricing and prompt-caching
+// documentation as read in October 2026:
+//  - Opus 5.5: $4 input / $20 output, cache reads $0.20.
+//  - Opus 5 and Opus 4.8: $5 / $25; cache reads use the general ~0.1x rule.
 //    These two are listed only because `fallbacks: "default"` can hand a refused
 //    request to them, and that attempt is billed at the fallback model's rates.
-//  - Cache writes: 1.25x the input price for the 5-minute TTL, 2x for the 1-hour TTL
-//    (prompt-caching.md, "Economics").
+//  - Cache writes: 1.25x the input price for the 5-minute TTL, 2x for the 1-hour TTL.
 // Re-check these against the live pricing page before quoting a number to anyone.
 
 export interface Price {

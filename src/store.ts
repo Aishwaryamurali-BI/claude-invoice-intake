@@ -7,7 +7,7 @@
 // invoice to "approved", and approve() needs a named human approver.
 import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { vendorKey, type CheckResult } from "./checks.js";
 import type { InvoiceFields } from "./schema.js";
@@ -169,17 +169,23 @@ export class InvoiceStore {
   /**
    * The only path to "filed". Requires a named approver. If any check failed, the
    * approver must also give an override reason, which is stored with the record.
+   * A repeat of an approval already recorded for the same approver is a no-op (so a
+   * retried HTTP call is not an error); any other decision on a decided invoice is refused.
    */
   approve(id: string, approver: string, via: string, note?: string, overrideReason?: string): InvoiceRecord {
-    const rec = this.requirePending(id);
     if (!approver.trim()) throw new ApprovalError("approver is required");
+    const already = this.get(id);
+    if (already?.status === "approved" && already.decided_by === approver) return already;
+    const rec = this.requirePending(id);
     if (!rec.all_checks_passed && !overrideReason?.trim()) {
       const failed = rec.checks.filter((c) => !c.passed).map((c) => c.name);
       throw new ApprovalError(`checks failed (${failed.join(", ")}); approving needs an override_reason`);
     }
     const dir = path.join(this.filedDir, safeSegment(vendorKey(rec.fields.vendor_name)));
     mkdirSync(dir, { recursive: true });
-    const base = path.join(dir, safeSegment(rec.fields.invoice_number));
+    let base = path.join(dir, safeSegment(rec.fields.invoice_number));
+    // A duplicate approved with an override is filed beside the first copy, never over it.
+    if (existsSync(`${base}.json`) || existsSync(`${base}.pdf`)) base += `.${id.slice(0, 8)}`;
     copyFileSync(path.join(this.inboxDir, `${id}.pdf`), `${base}.pdf`);
     const decidedAt = new Date().toISOString();
     const decisionNote = [note, overrideReason ? `override: ${overrideReason}` : null].filter(Boolean).join(" | ") || null;

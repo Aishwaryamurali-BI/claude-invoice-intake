@@ -32,16 +32,23 @@ export interface CheckContext {
   purchaseOrders: string[];
 }
 
-/** Money tolerance: one cent (or one unit for zero-decimal currencies like JPY). */
-const TOLERANCE = 0.01;
+/** Currencies with no minor unit: amounts are whole numbers, so rounding noise is up to one unit. */
+const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "CLP", "ISK"]);
+
+/** Money tolerance: one cent, or one unit for a zero-decimal currency like JPY. */
+const tolerance = (currency: string) => (ZERO_DECIMAL.has(currency.toUpperCase()) ? 1 : 0.01);
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** "ACME Supplies, Ltd." and "acme supplies ltd" are the same vendor for duplicate purposes. */
+/**
+ * "ACME Supplies, Ltd." and "acme supplies ltd" are the same vendor for duplicate purposes.
+ * Unicode-aware: letters in any script are kept, so two different non-Latin names stay different.
+ */
 export function vendorKey(name: string): string {
   return name
+    .normalize("NFKC")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 }
 
@@ -62,8 +69,26 @@ function quoteContains(quote: string, value: string): boolean {
   return norm(value).length > 0 && norm(quote).includes(norm(value));
 }
 
+/** Check 5 on its own, so the server can re-run it after the model call (see mcp-server.ts). */
+export function duplicateCheck(f: InvoiceFields, knownInvoices: CheckContext["knownInvoices"]): CheckResult {
+  const dup = knownInvoices.find(
+    (k) => vendorKey(k.vendor_name) === vendorKey(f.vendor_name) && invoiceKey(k.invoice_number) === invoiceKey(f.invoice_number),
+  );
+  return {
+    name: "not_duplicate",
+    passed: !dup,
+    detail: dup ? `${f.vendor_name} ${f.invoice_number} is already on file` : "first time seen",
+  };
+}
+
+/** Replace the not_duplicate result with one computed against the store as it is now. */
+export function refreshDuplicateCheck(checks: CheckResult[], f: InvoiceFields, knownInvoices: CheckContext["knownInvoices"]): CheckResult[] {
+  return checks.map((c) => (c.name === "not_duplicate" ? duplicateCheck(f, knownInvoices) : c));
+}
+
 export function runChecks(f: InvoiceFields, ctx: CheckContext): CheckResult[] {
   const results: CheckResult[] = [];
+  const TOLERANCE = tolerance(f.currency);
 
   // 1. Line items add up to the subtotal.
   const lineSum = round2(f.line_items.reduce((s, li) => s + li.amount, 0));
@@ -120,17 +145,12 @@ export function runChecks(f: InvoiceFields, ctx: CheckContext): CheckResult[] {
   }
 
   // 5. Same invoice number from the same vendor hasn't been seen before.
-  const dup = ctx.knownInvoices.find(
-    (k) => vendorKey(k.vendor_name) === vendorKey(f.vendor_name) && invoiceKey(k.invoice_number) === invoiceKey(f.invoice_number),
-  );
-  results.push({
-    name: "not_duplicate",
-    passed: !dup,
-    detail: dup ? `${f.vendor_name} ${f.invoice_number} is already on file` : "first time seen",
-  });
+  results.push(duplicateCheck(f, ctx.knownInvoices));
 
-  // 6. Every key field that has a value cites a page and a quote; for text fields
-  //    the quote must actually contain the value (catches made-up citations).
+  // 6. Every key field that has a value cites a page and a quote. For the invoice and PO
+  //    numbers the quote must also contain the value. Nothing here compares a quote with the
+  //    PDF text, so a plausible-looking quote still passes; the eval's citation-page accuracy
+  //    is the measure of whether the model cites the right place.
   const problems: string[] = [];
   for (const field of KEY_FIELDS) {
     const value = f[field];
