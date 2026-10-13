@@ -106,7 +106,7 @@ export interface ExtractOptions {
 }
 
 /** Thinking counts toward max_tokens on Opus 5.5 (thinking is always on), so leave room. */
-const MAX_TOKENS = 16000;
+export const MAX_TOKENS = 16000;
 
 export function buildRequest(pdfBase64: string) {
   return {

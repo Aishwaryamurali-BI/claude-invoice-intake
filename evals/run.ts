@@ -3,7 +3,14 @@
 //   npm run eval                       live run against the 10 synthetic invoices (needs a key)
 //   npm run eval -- --reps 3           three repetitions per case
 //   npm run eval -- --cases 03-multipage-usd,09-jpy-no-decimals
+//   npm run eval -- --max-cost 5       raise the spend cap (default $2 for the whole run)
 //   npm run eval:selftest              keyless: checks the grader itself (oracle + null baseline)
+//
+// Spend cap: before every call the runner adds the worst case that call could bill (MAX_TOKENS of
+// output plus a generous input allowance, at the requested model's prices) to what the run has
+// already spent. If that would pass --max-cost, the run stops there and the report says so. Spend
+// is summed from the API's usage fields, so an attempt that times out before a reply may bill
+// without being counted; set a spend limit in the Anthropic console as the outer guard.
 //
 // Live runs write evals/runs/<timestamp>/{results.jsonl,errors.jsonl,report.md}.
 // Without credentials it exits with a message and writes nothing. It never falls back
@@ -21,9 +28,20 @@ import {
   ExtractionRefusedError,
   ExtractionTruncatedError,
   isRequestedModel,
+  MAX_TOKENS,
   MODEL,
   type ExtractResult,
 } from "../src/extract.js";
+import { PRICES_PER_MTOK } from "../src/cost.js";
+
+/** Input allowance for the worst-case price of one call. A two-page invoice PDF is a few thousand tokens. */
+const WORST_CASE_INPUT_TOKENS = 20_000;
+
+/** The most one call can bill at the requested model's prices: every output token used, a large input. */
+function worstCaseCallUsd(): number {
+  const p = PRICES_PER_MTOK[MODEL]!;
+  return (WORST_CASE_INPUT_TOKENS * p.input + MAX_TOKENS * p.output) / 1_000_000;
+}
 import type { InvoiceFields } from "../src/schema.js";
 import { grade, nullFields, GRADED_FIELDS, type Grade } from "./grade.js";
 
@@ -120,7 +138,7 @@ async function withRetries<T>(fn: () => Promise<T>, maxAttempts = 4): Promise<{ 
   }
 }
 
-async function live(opts: { reps: number; filter?: string[] }) {
+async function live(opts: { reps: number; filter?: string[]; maxCost: number }) {
   if (defaultMode() !== "live") {
     console.error(
       "npm run eval needs Claude API credentials and makes paid calls.\n" +
@@ -149,10 +167,19 @@ async function live(opts: { reps: number; filter?: string[] }) {
   let outputTok = 0;
   const latencies: number[] = [];
   const perCase: string[] = [];
+  const worstCase = worstCaseCallUsd();
+  let stoppedByCap: string | null = null;
+  console.log(`Spend cap $${opts.maxCost.toFixed(2)} for the run; worst case per call $${worstCase.toFixed(2)} at ${MODEL} prices.\n`);
 
-  for (const { expected, pdf } of cases) {
+  runLoop: for (const { expected, pdf } of cases) {
     for (let rep = 0; rep < opts.reps; rep++) {
       const tag = `${expected.id} rep ${rep}`;
+      if (totalCost + worstCase > opts.maxCost) {
+        // Estimate before, log after: the next call could pass the cap, so it does not run.
+        stoppedByCap = `stopped before ${tag}: spent $${totalCost.toFixed(4)}, next call could bill up to $${worstCase.toFixed(2)}, cap $${opts.maxCost.toFixed(2)}`;
+        console.log(stoppedByCap);
+        break runLoop;
+      }
       let res: ExtractResult;
       let attempts = 1;
       try {
@@ -237,6 +264,7 @@ Run: ${stamp}
 Model requested: ${MODEL} (effort low, adaptive thinking, structured outputs, fallbacks "default")
 Cases: ${cases.length} synthetic invoices x ${opts.reps} rep(s) = ${attempted} attempts
 Outcomes: ${Object.entries(statusCounts).map(([k, v]) => `${k} ${v}`).join(", ")}
+Spend cap: $${opts.maxCost.toFixed(2)} for the run, checked before every call against a worst case of $${worstCase.toFixed(2)} per call. ${stoppedByCap ? "Hit: " + stoppedByCap + "." : "Not hit."}
 
 Ground truth: hand-authored case specs in evals/generate.ts (the PDFs are rendered from the same specs).
 Grader: deterministic field comparison in evals/grade.ts (no LLM judge). Self-test: \`npm run eval:selftest\`.
@@ -296,9 +324,15 @@ const { values } = parseArgs({
   options: {
     reps: { type: "string", default: "1" },
     cases: { type: "string" },
+    "max-cost": { type: "string", default: "2" },
     selftest: { type: "boolean", default: false },
   },
 });
 
+const maxCost = Number(values["max-cost"]);
+if (!Number.isFinite(maxCost) || maxCost <= 0) {
+  console.error(`--max-cost must be a positive dollar amount, got "${values["max-cost"]}"`);
+  process.exit(2);
+}
 if (values.selftest) selftest();
-else await live({ reps: Math.max(1, Number(values.reps)), filter: values.cases?.split(",") });
+else await live({ reps: Math.max(1, Number(values.reps)), filter: values.cases?.split(","), maxCost });

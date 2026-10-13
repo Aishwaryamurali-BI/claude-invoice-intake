@@ -106,6 +106,7 @@ How n8n talks to MCP: the server runs stateless Streamable HTTP with JSON respon
 ```bash
 npm run eval                 # live: 10 invoices x 1 rep, needs credentials, makes paid calls
 npm run eval -- --reps 3     # repeat each case to see run-to-run variation
+npm run eval -- --max-cost 5 # raise the spend cap; the default stops the run before it can pass $2
 npm run eval:selftest        # keyless: checks the grader (ground truth scores 100%, an empty extraction fails)
 ```
 
