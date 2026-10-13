@@ -146,7 +146,7 @@ src/
 evals/            generate.ts (synthetic PDFs), cases/, run.ts, grade.ts
 n8n/              intake workflow + error workflow
 tests/            vitest
-docs/HOW-IT-WORKS.md   study guide: every file, every design choice, interview questions
+docs/HOW-IT-WORKS.md   study guide: every file, every design choice
 ```
 
 ## License
