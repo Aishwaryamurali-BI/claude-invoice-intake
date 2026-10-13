@@ -2,7 +2,7 @@
 
 An accounts-payable intake pipeline: an invoice PDF arrives by email or webhook, Claude extracts the fields (with a page and quote for each key value), plain-code rules check the arithmetic, dates, PO and duplicates, and the invoice waits for a named human to approve it in Slack before anything is filed. It is built as an MCP server (the integration layer, usable from Claude Code or n8n), a self-hosted n8n workflow (the orchestration), and an eval set with a cost line. It also answers "what falls due in the next four weeks?"
 
-**Status, honestly:** everything here runs and is tested without an API key. Live extraction against Claude hasn't been run yet, so this README has no accuracy or cost numbers. `npm run eval` produces them (see [Evals](#evals)).
+**Status:** everything here runs and is tested without an API key (63 tests). The live eval was run against Claude Opus 5.5 on 2026-10-13: 10 of 10 synthetic invoices with every field correct, every citation on the right page, $0.022 per invoice. The full report is in [evals/reports/2026-10-13-opus-5-5/](evals/reports/2026-10-13-opus-5-5/report.md). The n8n and Docker pieces import and validate but have not been run end to end (see below).
 
 ## Architecture
 
@@ -114,7 +114,20 @@ Cases: clean USD, EUR with German number and date formats, a two-page invoice wi
 
 The report (`evals/runs/<time>/report.md`) has per-field accuracy, rule-check agreement, citation-page accuracy, total cost, cost per invoice, and cache read/write tokens. Refusals, truncations and infrastructure errors are counted separately and never scored as wrong answers.
 
-**Results:** none yet. Run `npm run eval` to reproduce.
+**Results (2026-10-13, Opus 5.5, effort low, 1 rep, [full report](evals/reports/2026-10-13-opus-5-5/report.md)):**
+
+| Measure | Result |
+|---|---|
+| Field accuracy | 100% (110/110) across 10 invoices |
+| Invoices with every field correct | 10/10, including the two-page, German-format, JPY, bad-totals and prompt-injection cases |
+| Rule checks agreeing with the expected verdict | 60/60 |
+| Source citations on the right page | 87/87 |
+| Cost | $0.22 for the run, $0.022 per invoice |
+| Tokens | 21,859 input, 5,915 output, 19,458 cache read, 2,162 cache write |
+| Median latency | 5.1 s |
+| Spend cap | $2.00, not hit |
+
+Ten cases is a regression check, not a leaderboard: one miss moves a field's accuracy by 10 points. The system prompt was served from cache on 9 of the 10 calls (2,162 tokens written once, read nine times). Run `npm run eval` to reproduce.
 
 ## Layout
 

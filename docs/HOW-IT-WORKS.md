@@ -131,7 +131,7 @@ Settings: `errorWorkflow` points at `n8n/error-alert.json`, an **Error Trigger**
 
 ---
 
-## Prompt caching, and why it might not hit
+## Prompt caching, and whether it hits
 
 Caching works by **prefix**: the API reuses work for the exact same bytes at the start of a request, up to a `cache_control` marker. Order is tools, then system, then messages.
 
@@ -139,7 +139,7 @@ Here the marker is on the system prompt, which is the same for every invoice. Th
 
 Reasons it might still not hit:
 
-1. **Too short.** Opus 5.5 won't cache a prefix under 512 tokens, and it fails silently (`cache_creation_input_tokens: 0`, no error). The system prompt is about 2,500 characters; by the rough rule of 4 characters per token that's around 600 tokens, close to the line. Only the first live call can confirm it: look for `cache_creation_input_tokens > 0` on the first call and `cache_read_input_tokens > 0` on the second.
+1. **Too short.** Opus 5.5 won't cache a prefix under 512 tokens, and it fails silently (`cache_creation_input_tokens: 0`, no error). The system prompt is about 2,500 characters, which looked close to the line. The 2026-10-13 live run settled it: the first call wrote 2,162 tokens to the cache and the next nine calls read them back (`evals/reports/2026-10-13-opus-5-5/results.jsonl`).
 2. **Expired.** The default cache lives 5 minutes from the last use. Invoices arriving an hour apart will each pay a cache write and never read it back.
 3. **Something changed the prefix.** A timestamp or ID in the system prompt misses every time. Switching models (including a fallback) misses, and changing the effort setting can too. `tests/extract.test.ts` checks that the system prompt has no dates or IDs in it.
 4. **Different workspace.** Caches are per workspace.
